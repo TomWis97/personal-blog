@@ -52,7 +52,7 @@ Please check if you have the same device names before copy/pasting these command
 ### Create /boot
 1. Wipe the eMMC storage.
 `# wipefs -a /dev/mmcblk2p1`
-1. Create a partition:
+2. Create a partition:
 ```
 # gdisk /dev/mmcblk2
 o (create new GPT partition table)
@@ -60,13 +60,13 @@ n (create new partition)
 (Partition number 1, default start, end "+4G", type "ef00")
 w (write partition table)
 ```
-1. Create a filesystem:
+3. Create a filesystem:
 `# mkfs.fat -F32 /dev/mmcblk2p1`
 
 ## Create LUKS and btrfs
-1. Wipe the NVME SSD:
+4. Wipe the NVME SSD:
 `# wipefs -a /dev/nvme0n1`
-1. Create a partition for the LUKS container.
+5. Create a partition for the LUKS container.
 ```
 # gdisk /dev/nvme0n1
 o (create new GPT partition table)
@@ -74,13 +74,13 @@ n (create new partition)
 (Defaults for number, start and end. Type should be 8309.)
 w (write partition table)
 ```
-1. Create a LUKS container:
+6. Create a LUKS container:
 `# cryptsetup luksFormat --type=luks2 /dev/nvme0n1p1`
-1. Mount the LUKS container:
+7. Mount the LUKS container:
 `# cryptsetup open /dev/nvme0n1p1 cryptroot`
-1. Now the opened LUKS volume is available at /dev/mapper/cryptroot. Create the BTRFS partition:
+8. Now the opened LUKS volume is available at /dev/mapper/cryptroot. Create the BTRFS partition:
 `# mkfs.btrfs /dev/mapper/cryptroot`
-1. Temporarily mount this Btrfs volume so we can create the subvolumes and unmount it again.
+9. Temporarily mount this Btrfs volume so we can create the subvolumes and unmount it again.
 ```
 # mkdir /mnt/tmp
 # mount /dev/mapper/cryptroot /mnt/tmp
@@ -99,20 +99,20 @@ w (write partition table)
 # mount -o subvol=@home /dev/mapper/cryptroot /mnt/manjaro/home
 # mount /dev/mapper/mmcblk2p1 /mnt/manjaro/boot
 ```
-1. From the Pinebook Pro, download the Manjaro pre-installed image. (Yes, again.) We are going to mount this image and use it as a source for a new installation.
-1. `unxz` the image and mount it. With losetup we can directly interact with a disk image (`-P` for discovering all partitions, `-r` for read-only and `-f` for auto detecting the available loop device).
+2. From the Pinebook Pro, download the Manjaro pre-installed image. (Yes, again.) We are going to mount this image and use it as a source for a new installation.
+3. `unxz` the image and mount it. With losetup we can directly interact with a disk image (`-P` for discovering all partitions, `-r` for read-only and `-f` for auto detecting the available loop device).
 ```
 # mkdir -p /mnt/src/{boot,root}
 # losetup -Prf Manjaro_something_generic.img
 # mount -o ro /dev/loop0p1 /mnt/src/boot
 # mount -o ro /dev/loop0p2 /mnt/src/root
 ```
-1. Install rsync as it's probably not pre-installed. If this fails, you probably need to run `pacman -Syu` first.
+4. Install rsync as it's probably not pre-installed. If this fails, you probably need to run `pacman -Syu` first.
 ```
 # pacman-mirrors
 # pacman -Sy rsync
 ```
-1. Copy files from the fresh image into your new filesystems:
+5. Copy files from the fresh image into your new filesystems:
 ```
 # rsync -aAXv /mnt/src/root /mnt/manjaro/
 # rsync -aAXv /mnt/src/boot /mnt/manjaro/boot/
@@ -184,7 +184,6 @@ This should be all. Shutdown the Pinebook Pro, *remove the SD card* and turn the
 ## Bonus: Pinebook Pro UART debugging
 When you don't get any display (which I encountered), it can be very helpful to see the serial console output. The Pinebook Pro provides a serial interface through the headphone jack.
 
-### The hardware
 I had a PL-2303HX powered USB to Serial adapter laying around which I used. I ran to the local Action store for a 3,5mm cable. I referred to [the official documentation](https://wiki.pine64.org/wiki/Pinebook_Pro#Using_the_serial_console_UART) for the pinout. Please keep in mind that this is as seen from the Pinebook. So you need to connect the RX from the Pinebook Pro to the TX on the serial adapter.
 
 Make sure that the Extlinux configuration has instructions for logging to the serial port (see above).
