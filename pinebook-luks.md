@@ -63,7 +63,7 @@ w (write partition table)
 3. Create a filesystem:
 `# mkfs.fat -F32 /dev/mmcblk2p1`
 
-## Create LUKS and btrfs
+### Create LUKS and btrfs
 4. Wipe the NVME SSD:
 `# wipefs -a /dev/nvme0n1`
 5. Create a partition for the LUKS container.
