@@ -1,0 +1,9 @@
+FROM docker.io/hugomods/hugo:latest AS build
+WORKDIR /src
+COPY . /src
+RUN hugo --minify
+
+FROM docker.io/jitesoft/lighttpd:latest AS serve
+COPY --from=build /src/public /web
+COPY build/lighttpd.conf /etc/lighttpd/lighttpd.conf
+EXPOSE 8080
