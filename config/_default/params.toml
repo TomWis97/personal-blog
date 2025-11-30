@@ -4,6 +4,8 @@ mainSections = ["post"]
 rssFullContent = true
 favicon = "/favicon.png"
 
+#customSCSS = ["scss/custom.scss"]
+
 [footer]
 since = 2025
 customText = ""

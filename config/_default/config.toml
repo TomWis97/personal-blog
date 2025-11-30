@@ -1,5 +1,6 @@
 # Change baseurl before deploy
 baseurl = "https://tomwishaupt.nl/blog"
+#relativeURLs = true
 languageCode = "en-us"
 title = "Tom Wishaupt's Personal Blog"
 

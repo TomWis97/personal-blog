@@ -1,0 +1,17 @@
+<style>
+body {
+  background-size: 400px 400px;
+}
+
+/* dark mode via Stack toggle (data-scheme) */
+:root[data-scheme="dark"] body {
+  background-image: url("{{ "images/bg-dark.svg" | relURL }}");
+}
+:root[data-scheme="light"] body {
+  background-image: url("{{ "images/bg-light.svg" | relURL }}");
+}
+:root[data-scheme="light"] aside {
+    background-color: rgba(245, 245, 245, 0.7);
+    backdrop-filter: blur(2px);
+}
+</style>
