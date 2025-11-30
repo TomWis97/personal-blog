@@ -37,6 +37,10 @@ jobs:
         id: vars
         run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+      - name: Normalize owner to lowercase
+        id: owner
+        run: echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Build and push (ARM64)
         uses: docker/build-push-action@v4
         with:
@@ -45,9 +49,9 @@ jobs:
           push: true
           platforms: linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/personal-blog:latest
-            ghcr.io/${{ github.repository_owner }}/personal-blog:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/personal-blog:${{ steps.vars.outputs.TAG }}
+            ghcr.io/${{ steps.owner.outputs.owner_lc }}/personal-blog:latest
+            ghcr.io/${{ steps.owner.outputs.owner_lc }}/personal-blog:${{ github.sha }}
+            ghcr.io/${{ steps.owner.outputs.owner_lc }}/personal-blog:${{ steps.vars.outputs.TAG }}
           # optionally enable build cache (speeds up successive builds)
           cache-from: type=gha
           cache-to: type=gha,mode=max
