@@ -45,7 +45,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./build/Dockerfile
+          file: ./build/Containerfile
           push: true
           platforms: linux/arm64
           tags: |
