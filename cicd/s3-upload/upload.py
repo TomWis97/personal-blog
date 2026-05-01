@@ -109,6 +109,9 @@ def main():
                         action='store_true')
     args = parser.parse_args()
     args.albumname = args.albumname.rstrip("/")
+    args.albumname = path.basename(args.albumname)
+    logging.getLogger("boto3").setLevel(logging.WARNING)
+    logging.getLogger("botocore").setLevel(logging.WARNING)
 
     setup_logger(args.verbose)
     load_env()
