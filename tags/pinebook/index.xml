@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Pinebook on Tom Wishaupt's Personal Blog</title><link>https://tomwis97.github.io/personal-blog/tags/pinebook/</link><description>Recent content in Pinebook on Tom Wishaupt's Personal Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Tue, 20 May 2025 16:32:12 +0100</lastBuildDate><atom:link href="https://tomwis97.github.io/personal-blog/tags/pinebook/index.xml" rel="self" type="application/rss+xml"/><item><title>Pinebook Pro, Manjaro with BTRFS on LUKS on NVME</title><link>https://tomwis97.github.io/personal-blog/p/pinebook-pro-luks/</link><pubDate>Tue, 20 May 2025 16:32:12 +0100</pubDate><guid>https://tomwis97.github.io/personal-blog/p/pinebook-pro-luks/</guid><description>&lt;img src="https://tomwis97.github.io/personal-blog/p/pinebook-pro-luks/cover.jpg" alt="Featured image of post Pinebook Pro, Manjaro with BTRFS on LUKS on NVME" /&gt;&lt;p&gt;So, I have this Pinebook Pro. Although a bit underpowered, still a nice and light laptop with good battery life. As it&amp;rsquo;s an ideal candidate for a travel device, I wanted the disk to be encrypted.
+However, this didn&amp;rsquo;t turn out to be as easy as I was hoping. As it was quite a struggle with debugging over UART and a lot of cursing, I ended up writing this post.&lt;/p&gt;
+&lt;p&gt;I have standardised on Manjaro (with i3) with LUKS and Btrfs for my machines, so I also wanted this for the Pinebook Pro. I equipped my Pinebook Pro with an NVME SSD.&lt;/p&gt;
+&lt;h2 id="steps"&gt;Steps
+&lt;/h2&gt;&lt;p&gt;To implement this you&amp;rsquo;d have to do this:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Flash Tow-boot to SPI (maybe optional, I don&amp;rsquo;t even know anymore).&lt;/li&gt;
+&lt;li&gt;Create an SD card with a fresh Manjaro installation.&lt;/li&gt;
+&lt;li&gt;Create partitions, LUKS, Btrfs volumes.&lt;/li&gt;
+&lt;li&gt;Mount a fresh Manjaro image and the partitions created in the previous step.&lt;/li&gt;
+&lt;li&gt;Change some configurations.&lt;/li&gt;
+&lt;li&gt;(Bonus: UART on the Pinebook Pro.)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="resulting-set-up"&gt;Resulting set-up
+&lt;/h2&gt;&lt;p&gt;This guide will result in the following boot sequence:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;The Pinebook Pro&amp;rsquo;s CPU will read the Tow-Boot bootloader from SPI storage.&lt;/li&gt;
+&lt;li&gt;Tow-Boot will load the initial boot ramdisk (&lt;code&gt;/boot&lt;/code&gt;) from the first partition of the eMMC storage.&lt;/li&gt;
+&lt;li&gt;Linux will boot and prompt for the disk encryption password.&lt;/li&gt;
+&lt;li&gt;The LUKS volume is opened and &lt;code&gt;/&lt;/code&gt;, &lt;code&gt;/home&lt;/code&gt; (and &lt;code&gt;/.snapshots&lt;/code&gt;) Btfs volumes will be mounted.&lt;/li&gt;
+&lt;li&gt;Manjaro boots up as usual.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="flashing-tow-boot-on-the-pinebook-pro"&gt;Flashing Tow-boot on the Pinebook Pro
+&lt;/h2&gt;&lt;p&gt;As I wanted to boot from NVME (which the Pinebook Pro does not support out of the box), I needed to flash Tow-Boot.&lt;/p&gt;
+&lt;p&gt;However, it turned out that I couldn&amp;rsquo;t get that to work. Tow-boot read the boot partition just fine, but after loading the initial image the NVME drive would&amp;rsquo;t show up. A missing module? Maybe. I don&amp;rsquo;t care as I ended up placing &lt;code&gt;/boot&lt;/code&gt; on the eMMC storage.&lt;/p&gt;
+&lt;p&gt;Installing Tow-Boot is quite simple, just follow &lt;a class="link" href="https://tow-boot.org/devices/pine64-pinebookPro.html" target="_blank" rel="noopener"
+&gt;the documentation&lt;/a&gt;. You can download the Pinebook Pro version of Tow-Boot from &lt;a class="link" href="https://github.com/Tow-Boot/Tow-Boot/releases" target="_blank" rel="noopener"
+&gt;here&lt;/a&gt;. Just make sure you grab the version for the Pinebook. &lt;code&gt;dd&lt;/code&gt; it to a blank SD card and turn the Pinebook on. This should show a prompt where you can install it to the SPI storage.&lt;/p&gt;
+&lt;p&gt;Turn off the Pinebook, remove the SD card and reboot. This should show some sign of life from Tow-Boot.&lt;/p&gt;
+&lt;h2 id="create-an-sd-card-with-manjaro"&gt;Create an SD card with Manjaro
+&lt;/h2&gt;&lt;p&gt;Go to the &lt;a class="link" href="https://manjaro.org/products/download/arm" target="_blank" rel="noopener"
+&gt;Manjaro ARM download page&lt;/a&gt; and grab the &lt;em&gt;Generic&lt;/em&gt; image with your preferred desktop environment. Unpack it and &lt;code&gt;dd&lt;/code&gt; it to an SD card. (Something like &lt;code&gt;unxz Manjaro.img.xz; dd if=Manjaro.img of=/dev/yoursdcard bs=1M conv=fsync status=progress&lt;/code&gt;.) Shove that SD in the Pinebook and boot from it. (Tow-Boot lets you easily select the boot device, which is cool.)&lt;/p&gt;
+&lt;h2 id="create-partitions-and-stuff"&gt;Create partitions and stuff
+&lt;/h2&gt;&lt;p&gt;As described earlier, I&amp;rsquo;m going to create the following partition layout:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;span class="lnt"&gt;5
+&lt;/span&gt;&lt;span class="lnt"&gt;6
+&lt;/span&gt;&lt;span class="lnt"&gt;7
+&lt;/span&gt;&lt;span class="lnt"&gt;8
+&lt;/span&gt;&lt;span class="lnt"&gt;9
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;Storage FS Mountpoint
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;eMMC (mmcblk2)
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;`- mmcblk2p1 FAT32 /boot
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;NVME (nvme0n1)
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;`- nvme0n1p1 LUKS container
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; `- cryptroot BTRFS -
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; |- @ BTRFS subvol /
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; |- @home BTRFS subvol /home
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; `- @.snapshots BTRFS subvol /.snapshots
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;Please check if you have the same device names before copy/pasting these commands.&lt;/p&gt;
+&lt;h3 id="create-boot"&gt;Create /boot
+&lt;/h3&gt;&lt;ol&gt;
+&lt;li&gt;Wipe the eMMC storage.
+&lt;code&gt;# wipefs -a /dev/mmcblk2p1&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Create a partition:&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;span class="lnt"&gt;5
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# gdisk /dev/mmcblk2
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;o (create new GPT partition table)
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;n (create new partition)
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;(Partition number 1, default start, end &amp;#34;+4G&amp;#34;, type &amp;#34;ef00&amp;#34;)
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;w (write partition table)
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;ol start="3"&gt;
+&lt;li&gt;Create a filesystem:
+&lt;code&gt;# mkfs.fat -F32 /dev/mmcblk2p1&lt;/code&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id="create-luks-and-btrfs"&gt;Create LUKS and btrfs
+&lt;/h3&gt;&lt;ol start="4"&gt;
+&lt;li&gt;Wipe the NVME SSD:
+&lt;code&gt;# wipefs -a /dev/nvme0n1&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Create a partition for the LUKS container.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;span class="lnt"&gt;5
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# gdisk /dev/nvme0n1
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;o (create new GPT partition table)
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;n (create new partition)
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;(Defaults for number, start and end. Type should be 8309.)
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;w (write partition table)
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;ol start="6"&gt;
+&lt;li&gt;Create a LUKS container:
+&lt;code&gt;# cryptsetup luksFormat --type=luks2 /dev/nvme0n1p1&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Mount the LUKS container:
+&lt;code&gt;# cryptsetup open /dev/nvme0n1p1 cryptroot&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Now the opened LUKS volume is available at /dev/mapper/cryptroot. Create the BTRFS partition:
+&lt;code&gt;# mkfs.btrfs /dev/mapper/cryptroot&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Temporarily mount this Btrfs volume so we can create the subvolumes and unmount it again.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;span class="lnt"&gt;5
+&lt;/span&gt;&lt;span class="lnt"&gt;6
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mkdir /mnt/tmp
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mount /dev/mapper/cryptroot /mnt/tmp
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# btrfs subvolume create /mnt/tmp/@
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&amp;lt;# btrfs subvolume create /mnt/tmp/@home
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# btrfs subvolume create /mnt/tmp/@snapshots
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# unmount /mnt/tmp
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;h2 id="mount-mount-mount"&gt;Mount, mount, mount!
+&lt;/h2&gt;&lt;ol&gt;
+&lt;li&gt;Mount the volumes of your to-be Manjaro installation.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;span class="lnt"&gt;5
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mkdir /mnt/manjaro
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mount -o subvol=@ /dev/mapper/cryptroot /mnt/manjaro
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mkdir /mnt/manjaro/{home,boot}
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mount -o subvol=@home /dev/mapper/cryptroot /mnt/manjaro/home
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mount /dev/mapper/mmcblk2p1 /mnt/manjaro/boot
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;ol start="2"&gt;
+&lt;li&gt;From the Pinebook Pro, download the Manjaro pre-installed image. (Yes, again.) We are going to mount this image and use it as a source for a new installation.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;unxz&lt;/code&gt; the image and mount it. With losetup we can directly interact with a disk image (&lt;code&gt;-P&lt;/code&gt; for discovering all partitions, &lt;code&gt;-r&lt;/code&gt; for read-only and &lt;code&gt;-f&lt;/code&gt; for auto detecting the available loop device).&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mkdir -p /mnt/src/{boot,root}
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# losetup -Prf Manjaro_something_generic.img
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mount -o ro /dev/loop0p1 /mnt/src/boot
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mount -o ro /dev/loop0p2 /mnt/src/root
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;ol start="4"&gt;
+&lt;li&gt;Install rsync as it&amp;rsquo;s probably not pre-installed. If this fails, you probably need to run &lt;code&gt;pacman -Syu&lt;/code&gt; first.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# pacman-mirrors
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# pacman -Sy rsync
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;ol start="5"&gt;
+&lt;li&gt;Copy files from the fresh image into your new filesystems:&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# rsync -aAXv /mnt/src/root /mnt/manjaro/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# rsync -aAXv /mnt/src/boot /mnt/manjaro/boot/
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;h2 id="a-lot-of-configuration"&gt;A lot of configuration
+&lt;/h2&gt;&lt;p&gt;Since the Manjaro installation we just copied isn&amp;rsquo;t used to be encrypted and now has a different partition table, there&amp;rsquo;s some configuration which needs to be done.&lt;/p&gt;
+&lt;h3 id="gather-disk-uuids"&gt;Gather disk UUIDs
+&lt;/h3&gt;&lt;p&gt;In the following few steps, we&amp;rsquo;re going to refer to volumes through UUIDs which we need to gather first. Please note these somewhere, we&amp;rsquo;re going to refer to these IDs as follows:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Device&lt;/th&gt;
+&lt;th&gt;Name&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;/dev/mmcblk2 (eMMC)&lt;/td&gt;
+&lt;td&gt;BOOT_UUID&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;/dev/nvme0n1p1&lt;/td&gt;
+&lt;td&gt;LUKS_UUID&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;/dev/mapper/cryptroot&lt;/td&gt;
+&lt;td&gt;BTRFS_UUID&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;Per volume use the following command &lt;code&gt;blkid &amp;lt;device&amp;gt;&lt;/code&gt; and note the value for &lt;code&gt;UUID=&lt;/code&gt;. In the following steps, replace the relevant references. (I.e. change &lt;code&gt;UUID=&amp;lt;LUKS_UUID&amp;gt;&lt;/code&gt; to &lt;code&gt;UUID=5ac35e05-0064-4a48-a896-56020298f90c&lt;/code&gt;.)&lt;/p&gt;
+&lt;h3 id="configure-crypttab"&gt;Configure crypttab
+&lt;/h3&gt;&lt;p&gt;Crypttab is used to unlock the luks volumes on boot. Add the following line to &lt;code&gt;/mnt/manjaro/etc/crypttab&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;cryptroot UUID=&amp;lt;LUKS_UUID&amp;gt; none luks
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;h3 id="configure-fstab"&gt;Configure fstab
+&lt;/h3&gt;&lt;p&gt;We have a lot of new partitions, so we need to update fstab. &lt;em&gt;Remove the two existing lines&lt;/em&gt; (as those UUIDs don&amp;rsquo;t exist anymore) and add the following lines to &lt;code&gt;/mnt/manjaro/etc/fstab&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;UUID=&amp;lt;BTRFS_UUID&amp;gt; / btrfs subvol=@ 0 0
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;UUID=&amp;lt;BTRFS_UUID&amp;gt; /home btrfs subvol=@home 0 0
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;UUID=&amp;lt;BTRFS_UUID&amp;gt; /.snapshots btrfs subvol=@snapshots 0 0
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;UUID=&amp;lt;BOOT_UUID&amp;gt; /boot vfat defaults,noexec,umask=0077,nodev,showexec 0 0
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;h3 id="confgure-extlinux"&gt;Confgure extlinux
+&lt;/h3&gt;&lt;p&gt;Extlinux needs to instruct the Linux kernel to use the newly encrypted volume. This is done by editing &lt;code&gt;/mnt/manjaro/boot/extlinux/extlinux.conf&lt;/code&gt;. Replace the &lt;code&gt;APPEND&lt;/code&gt; line with the following one:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;APPEND initrd=/initramfs-linux.img cryptdevice=UUID=&amp;lt;LUKS_UUID&amp;gt;:cryptroot root=UUID=&amp;lt;BTRFS_UUID&amp;gt; rootflags=subvol=@ rw rootwait audit=0 splash plymouth.ignore-serial-consoles console=ttyS2,1500000 loglevel=7 console=tty1 video=eDP-1:1920x1080@60
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;A short explaination of the options we added:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;cryptdevice=UUID=5ac35e05-0064-4a48-a896-56020298f90c:cryptroot&lt;/code&gt;: Instruct the kernel we have a LUKS device which should be named &lt;code&gt;cryptroot&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;root=UUID=84cf30ed-62dc-43b1-8882-fb0d3a88309e&lt;/code&gt;: Refer to the BTRFS filsystem within the LUKS volume.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;rootflags=subvol=@&lt;/code&gt;: Instruct the kernel to use the correct subvolume for root.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;rootwait&lt;/code&gt;: Wait until the partition is unlocked.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;plymouth.ignore-serial-consoles&lt;/code&gt;: For UART debugging (so, optional).&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;console=ttyS2,1500000&lt;/code&gt;: For UART debugging (so, optional).&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;loglevel=7&lt;/code&gt;: For debugging (so, optional).&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;console=tty1&lt;/code&gt;: Make sure TTY1 can be used to entering the password.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;video=eDP-1:1920x1080@60&lt;/code&gt;: Initialize display (might not be required, idk).&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="options-for-mkinitcpioconf"&gt;Options for mkinitcpio.conf
+&lt;/h3&gt;&lt;p&gt;The mkinitcpio creates the initial ramdisk the system uses to boot. We need to instruct it to build in the correct modules and hooks for encryption.
+Within the file &lt;code&gt;/mnt/manjaro/etc/mkinitcpio.conf&lt;/code&gt;, make sure the following lines are present like this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;MODULES=(panfrost rockchipdrm drm_kms_helper hantro_vpu analogix_dp rockchip_rga panel_simple arc_uart cw2015_battery i2c-hid iscsi_boot_sysfs jsm pwm_bl uhid)
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;HOOKS=(base udev autodetect modconf kms keyboard keymap consolefont block encrypt filesystems fsck)
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;COMPRESSION=&amp;#34;cat&amp;#34;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;We now need to run &lt;code&gt;mkinitcpio&lt;/code&gt;. But in order to be able to do that, we need to mount some more stuff. Then chroot into your new installation and run &lt;code&gt;mkinitcpio -P&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# for i in proc sys dev run; do mount --bind /$i /mnt/manjaro/$i; done
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# chroot /mnt/manjaro
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;# mkinitcpio -P
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;h2 id="done"&gt;Done!
+&lt;/h2&gt;&lt;p&gt;This should be all. Shutdown the Pinebook Pro, &lt;em&gt;remove the SD card&lt;/em&gt; and turn the laptop on again. Tow-boot should look at the eMMC device, find the boot partition, load Linux and prompt you for the encryption password.&lt;/p&gt;
+&lt;h2 id="bonus-pinebook-pro-uart-debugging"&gt;Bonus: Pinebook Pro UART debugging
+&lt;/h2&gt;&lt;p&gt;When you don&amp;rsquo;t get any display (which I encountered), it can be very helpful to see the serial console output. The Pinebook Pro provides a serial interface through the headphone jack.&lt;/p&gt;
+&lt;p&gt;I had a PL-2303HX powered USB to Serial adapter laying around which I used. I ran to the local Action store for a 3,5mm cable. I referred to &lt;a class="link" href="https://wiki.pine64.org/wiki/Pinebook_Pro#Using_the_serial_console_UART" target="_blank" rel="noopener"
+&gt;the official documentation&lt;/a&gt; for the pinout. Please keep in mind that this is as seen from the Pinebook. So you need to connect the RX from the Pinebook Pro to the TX on the serial adapter.&lt;/p&gt;
+&lt;p&gt;Make sure that the Extlinux configuration has instructions for logging to the serial port (see above).&lt;/p&gt;
+&lt;p&gt;Also open up the Pinebook Pro and set the switch for the 3,5mm jack to UART instead of audio. Connect the 3,5mm to the Pinebook Pro and the USB adapter to another computer. On the other device, run something like picocom: &lt;code&gt;picocom /dev/ttyUSB0 -b 1500000&lt;/code&gt;. As soon as the Linux kernel starts booting, you should see the output on your other computer.&lt;/p&gt;</description></item></channel></rss>
