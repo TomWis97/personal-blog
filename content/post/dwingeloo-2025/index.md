@@ -3,7 +3,7 @@ title: Dwingeloo 2025
 description: Some nice pictures of my few days offline.
 date: 2025-10-30T00:00:00+0100
 slug: dwingeloo-2025
-image: IMG_9531.jpeg
+image: IMG_9531.jpg
 categories:
     - Photography
 tags:
